@@ -1,0 +1,200 @@
+
+---
+Author: "Jefffrey Khang"
+title: "RSM 384 Homework 1 -- Due 9/25/2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Get the data:
+```{r}
+library(tidyverse)
+library(RCurl)
+url <- getURL("https://raw.githubusercontent.com/statsbylopez/StatsSports/master/Data/nfl_fg.csv")
+nfl.kick <- read.csv(text = url)
+```
+
+**Step 1: Compute Expected (Field) Goals**
+
+As seen below, the "nfl.kick" data frame contains 9 columns of information:
+```{r}
+nfl.kick %>% head()
+```
+
+When creating a regression to predict the probability of scoring a field kick, I first hypothesize what factors could potentially have an influence on the kick:
+
+1. Game Minute: The game minute and the success of a field kick may have a relationship due to the fact that players may be more "warmed up" as the game progresses and perform better. Or on the contrary, they may perform worse on average after being "tired out". However, as kickers are only the field for short periods of the time during the game, I believe time wouldn't have a big influence on their performance. 
+
+2. Distance: Empirically, the longer the distance of the field kick, the more difficult it is to score a goal. It requires more strength to kick the ball further and requires the ball to travel accurately over a longer distance. 
+
+3. ScoreDiff: The score of the game may have a mental effect on the players in terms of perceived "pressure". Whether such pressure positively or negatively influences the player is up for the xFG coefficient to demonstrate. However, if the score differential is too high, then players may not experience such phenomenon. Hence an adjustment is needed which is why I created the dummy variable **Pressure**. I created a dummy variable that indicates whether the score differential is within the range in which I believe the players would feel substantial pressure. -3 because a successful field goal would bring the trailing team to be tied on points and 0 because a field goal would be a tie-breaker between two teams. Hence, we later observe whether this circumstance serves as a mental obstruction or elevated motivation for the players to convert their field kick. 
+
+4. Grass: Compared to turf fields, grass fields are generally unfavorable conditions for the kickers. This is because grass fields can vary greatly depending on maintenance and weather conditions. 
+
+5. I also created a new variable **OT_Effect**: This is to account for the physical fatigue the kicker may experience in overtime. During this period, players are tired, but the stakes are a lot higher for the kickers to convert in these low margin circumstances. Again I acknowledge that Kickers aren't physically active throughout the whole duration of a match, but I wish to observe any potential relationship. Additionally, this may overlap with the "Pressure" variable I create due to the fact that most teams compete in tighter score margins during OT. From the coefficient summary, we can observe whether this physical toll has an effect on the kickers and whether it positively or negatively affects their performance.
+```{r}
+nfl.kick <- nfl.kick %>% mutate(Pressure = ScoreDiff >= -3 & ScoreDiff <= 0)
+nfl.kick <- nfl.kick %>% mutate(OT_Effect = GameMinute > 60)
+```
+
+My hypothesis can be later validated by the p-value of the coefficient in the logistic regression I create: 
+**My linear weights analytic is obtained by estimation below**:
+```{r}
+xFG <- glm(Success ~ GameMinute + Distance + Pressure + Grass + OT_Effect, 
+             data = nfl.kick, family = "binomial")
+summary(xFG)
+```
+As seen, GameMinute and OT_EffectTRUE have significantly high p-values and are statistically insignificant. This means that there isn't a strong relationship between these regressors and xFG, which means any association with these regressors would likely occur by chance. PressureTrue has a P-value of approximately 0.1, so it is more statistically significant than the previous 2 variables, but again, not as significant. On the contrary, Distance and GrassTrue are statistically significant which validates a strong relationship between them and xFG.
+
+**Interpretation of the coefficient**:
+The coefficient of a logistic regression can be interpreted as such: "a unit increase in the regressor multiplies the odds ratio by the exponentiation of the  coefficients." If the exponentiation of the coefficient is less than 1, odds decrease while the odds increase if it's greater than 1. Now we exponentiate each of the coefficient: 
+```{r}
+exp(xFG$coeff)
+exp(confint(xFG))
+```
+Notation: (+): regressor increases the odds | (-) regressor decreases the odds
+
+1.(-)Game Minute: holding the other variables at a fixed value, a minute increase in the game is negatively associated to xFG by a decrease in the odds of a field goal by approximately 0.015%. This is an extremely insignificant change and should be disregarded. This validates that time has a low association to xFG. This is perhaps due to the fact that kickers don't experience physical fatigue compared to on-field players during the game and are able to rest and warm up in the sidelines. 
+
+2.(-)Distance: holding the other variables at a fixed value, a yard increase in the game is negatively associated to xFG by a decrease in the odds of a field goal by approximately 9.76%. Once again, this makes intuitive sense as the further the kicker is away from the post, the harder it is for them to kick the football accurately and at a higher velocity. 
+
+3.(-)PressureTRUE: holding the other variables at a fixed value, when the score is "tight" and the differential is between -3 and 0, the kicker experiences pressure which is negatively associated to xFG by a decrease in the odds of a field goal by approximately 9.51%. This may suggest how "pressure" serves as a mental hurdle for the players, which is why we often witness kickers miss field goals that they would otherwise routinely make in low-stake training sessions 
+
+4.(-)GrassTRUE: holding the other variables at a fixed value, a grass field is negatively associated to xfG by a decrease in the odds of a field goal by approximately 15.37%. This upholds the suggestion that grass fields are prone to wear and tear throughout the game and undergo changes depending on the weather circumstances. Consequently, these changes would then pose as an additional challenge for the kickers to adjust for.  
+
+5.(+)OT_EffectTRUE: holding the other variables at a fixed value, when the game is at overtime, players perhaps experience more motivation, which is positively associated to the increase in the odds of a field goal by approximately 3.23%. However as previously stated, this association is statistically insignificant.
+
+**Interpretation of fitted values and epsilon (residual) in terms of skill vs luck**:
+The fitted values are the predicted probability of a field goal based on the regressors discussed above that were subsequently accounted for in the logistic regression. The epsilon (residual) would be the difference between the actual success (either 0 or 1) and the predicted value from my logistic regression. This can be called "makes above average".
+
+I believe the residuals aren't an indicator of the kicker's "luck". Instead, it should be interpreted as either: 1. the flaw of the regression 2. players ability to outperform or under-perform against considerable circumstance.
+
+1. Flaw of the model: The model may lack a lot of other regressors due to the fact that "nfl.kick" is missing a lot of factors that characterizes a field kick. Such components include:
+-Experience of the players (# of years played)
+-The wind (in mph) of when the kick was taken
+-Kicker's stronger foot (left or right)
+-Which side of the field the kick was taken in
+All of these missing components may be responsible for causing the difference between the calculated xFG and the actual success of the kicks by either under or overstating the probability of the field goals. 
+
+2.Assuming that my model is accurate, the residuals could also be interpreted as an indicator of the players' ability, not luck:
+
+-Positive error term: indicates that the player "outperformed" the predicted field goal probability by scoring (success = 1). For example, based on my model, Justin Tucker's (one of the best kickers in NFL history) record-breaking and game-winning 66-yard field goal at the dying seconds of the game would have a low xFG. Regardless, he makes the field goal which would go down as a residual in my model. As he is regarded as a player with incredible ability, it would be an understatement to his talent if we attribute this goal to luck. 
+
+-Negative error term: indicates that the player "underperformed" the predicted field goal probability by missing (success = 0) a goal they "should have" made. If players miss under favorable circumstances of the kick, this would go down as mistakes that player make. If a player consistently misses and under-performs agains the xFg, then it would likely be a testament to the player's ability to kick or suggest a state of injury the player is going through. Furthermore, there are many circumstances, as included as variables in my regression, that cause a player to make mistakes for kicks that they would otherwise routinely make in their training sessions. This is the beautiful challenge of sports. 
+
+**Hence, I believe that simply labeling the residuals of the regression as an indicator of "luck" is an invalidated assumption that disregards either the flaw of the model (for not containing enough regressors) or undermines a player's true ability. This is more so true in the context of American football because a field kick is conducted from a "set-piece" motion and not from a free-flowing game state. For example in soccer, residuals from  expected goals introduce more explanation for "luck" because most soccer goals arise from a free-flowing play of the game and involves 22 players crowding in small box. In such cases, "luck" may come in the form of a goalkeeper making a silly error such as dropping a straight, weak shot into his own net or a shot getting deflect by multiple defenders and ending up in the net.**    
+
+**Step 2: Makes above average**
+After clarifying how I interpret the residual, I now compute the residuals of each kick and add it to the data frame in the form of makes_above_avg. Depending on whether the kick was a goal or miss, it would have a positive or negative value.
+```{r}
+nfl.kick <- nfl.kick %>% mutate(fitted_make = fitted(xFG))
+nfl.kick <- nfl.kick %>% mutate(makes_above_avg = Success-fitted_make)
+```
+
+To assess the accuracy of our model, we generate a histogram of the residuals. If it's normally distributed around 0, then the model can be deemed to successfully predict the field goals. 
+**Here's the histogram of makes_above_avg**:
+```{r}
+ggplot(nfl.kick, aes(makes_above_avg)) + geom_histogram(bins = 60)
+```
+
+However, this is not the case. The shape looks like a normal distribution that is missing its left-hand side; as seen, there's a long tail that is negatively skewing the residual.
+
+**Observation 1**: there is a negatively skewing long tail that occurs below -0.5. This may suggest that the model is either flawed by oftentimes overestimating the xFG for difficult kicks. On the contrary, if we assume that my model is flawless, then such occurrence would suggest that a number of poor-performing players are negatively skewing the data by defying the expectations and constantly missing "easy" kicks that have at least a 50% chance of going in. 
+
+**Observation 2**: the mode occurs around 0.05. Assuming my model is correct, this would suggest that most kicks will be taken under conditions in which the coach tactically expects to kicker to be able to make the kick. Hence, most kicks are taken when the probability of a goal is around 95%. 
+
+**Now we plot the residual against the distance**:
+```{r}
+ggplot(nfl.kick,aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+```
+*Note: the plotted distance starts from approximately 20 yards because the shortest possible field goal in NFL is 17 yards. 
+
+-**Interpreting the sign of the trend line**: As seen from the blue trend line,our model demonstrates accuracy in predicting field goals between 20 and 60 yards because the line stays close to when the residual axis is 0. However after 60 yards, the line curves downwards and demonstrates more negative residuals. This may suggest that our model is over-predicting the probability of success from distances above 60 yards and is underestimating the difficulties of the kicks from that distance. Once again, another way to perceive this flaw in the model is acknowledging the fact that the regression doesn't consider enough factors as the data frame available has limited information. On the contrary, if we assume that my model is flawless and accurate, this skew would suggest that some players are not meeting the expecations in the NFL and are being deployed to take longer kicks. This can be explained by phenomenon in which teams drop their kickers frequently if they don't make their kicks, which prevents them from taking multiple kicks and failing frequently.  
+
+-**Interpreting the magnitude of the trend line**: Again, when observing the magnitude of the residuals, we see that the size of the residuals are closer to 0 between the 20 and 60 yard line which may suggest that the model is accurately predicting xFG of kicks taken from those distance. After 60 yards, the trend line extends downwards but at a very small magnitude. The downward line is almost flat and doesn't extend past a quarter of the residual = -0.25 axis. This suggests that perhaps the model only slightly underestimate the difficulty of field kicks taken in distances beyond 60 yards because the negative slope is small or that it is sloping downwards because of the small number of large negative residuals that is causing a skew. **As previously seen in the histogram, the negative long tail may be explained by residuals arising from kicks taken beyond 60 yards. Consequently, in this trend line, thes small downward curve after the 60 yard line is explained by the negative skew caused by those residuals.**
+
+**Step 3: Top 5's**
+When evaluating the value of a player, ability should be at the forefront of consideration. In the context of field goals, the ability of a player is demonstrated by players who consistently score goals even against difficult circumstances (situations with lower xFG). Hence, with our data, there are 2 ways to asses players: 
+1. Their total accumulated makes above average (xFG)
+
+2. Their makes above average on a per kick basis. 
+The first option penalizes kickers with shorter careers or less kicks in their record. Hence, it's arguable that the the per kick basis demonstrates the quality over quantity of a player's kicks. On the contrary, the per kick basis stat may over-value players with very few kicks in their career but have converted them to goals. Such players may not have had a long enough career or had just started; hence, they may not have experienced other circumstances that make them more prone to error or difficulties.
+
+Computing each kickers' total accumulated "makes above avg" and "makes above avg" on a per kick basis, which may demonstrate the general quality of each kick: 
+```{r}
+Kicker_Stats <- nfl.kick %>%
+    group_by(Kicker) %>%
+    summarize(total = sum(makes_above_avg),numkicks=n(),makes_per_kick=total/numkicks)
+```
+
+Histogram for the 2 stats:
+```{r}
+ggplot(Kicker_Stats, aes(total)) + geom_histogram()
+ggplot(Kicker_Stats, aes(makes_per_kick)) + geom_histogram(bin = 100)
+```
+The **total** accumulated "makes_per_avg" is normally distributed, but **"makes_per_kicK"** doesn't. Although most kickers perform as expected, there's a long tail to the left which explains the phenomenon in NFL in which kickers who consistently make their most of their field from the start will continue playing for their team and bring the average makes_per_kick closer to the mean. However, the left tail may portray the kickers who miss their first few attempts and don't get trusted to kick more.
+
+Top 5 kicker by makes above average overall:
+```{r}
+Kicker_Stats %>% arrange(desc(total))%>% slice(1:5)
+```
+Top 5 kicker on per kick basis 
+```{r}
+Kicker_Stats %>% arrange(desc(makes_per_kick))%>% slice(1:5)
+```
+As seen in the 2 tables, we see the occurrence in which all the top 5 players on "total" basis have more than at least 150 kicks, which shows that this ranking biases players with more games in their career. However, 3 out of the top 5 players in the "makes_per_kick" basis have less than 40 kicks in their stats. This may suggest that these players are young "rising" talents in the game who are expected to consistently do good. However, a true testament would be to reach at least 150 kicks to demonstrate true consistency in their performance and hold fair comparison to Tucker and Bailey. Hence, it's important to look at both stats to determine which player actually demonstrates both longevity, consistency, and quality in their kicks. Although Scifres is ranked highest in "makes_per_kick" category, this doesn't mean he has the highest quality of kicks. This data is only based one his one, single kick. Empirically, a player's ability cannot be judged by one kick and needs more sample sizes of kicks to validate whether this player could repeat his performance over a longer period of time. 
+
+**As seen, both Bailey and Tucker appear in both of these top 5 stats which validates their ability to consistently perform well and exceed the expectations. They both have over 150 kicks and yet demonstrate a top 5 makes_per_kick stat, which goes on to show that they are able to repeatedly overcome challenges that they face in field goals. In reality, Tucker is a 5x First Team Pro and 7x Pro Bowl player while Bailey is a 1x Pro bowl player and left the Cowboys as the 2nd most accurate kicker in NFL's history, holding the Cowboy's record for most consecutive field goals made (30).**
+
+**Now we identify the top 5 kickers for longer kicks**:
+Identifying the long kicks in the data:
+```{r}
+nfl.kick <- nfl.kick %>% 
+  mutate(long_kick = Distance >= 40)
+```
+Creating new table for long kicks:
+```{r}
+KickerLong <- nfl.kick %>% filter(long_kick == TRUE) %>% group_by(Kicker) %>% summarize(total = sum(fitted_make),numkicks=n(),makes_per_kick=total/numkicks)
+```
+Top 5 **long** kickers on a total makes above average basis:
+```{r}
+KickerLong %>% arrange(desc(total)) %>% slice(1:5)
+```
+Top 5 **long** kickers on a makes above average basis per kick:
+```{r}
+KickerLong %>% arrange(desc(makes_per_kick))%>% slice(1:5)
+```
+As seen on both tables, no player appears twice, which demonstrates that no player in this data consistently performs long kicks significantly better than other players. This makes sense, as longer kicks are harder to perform and are prone to more error.
+
+**Step 4: Measuring Kicker Effectiveness**
+```{r}
+ggplot(nfl.kick %>% filter(Kicker == 'Bailey'), aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+ggplot(nfl.kick %>% filter(Kicker == 'Tucker'), aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+ggplot(nfl.kick %>% filter(Kicker == 'Bironas'), aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+ggplot(nfl.kick %>% filter(Kicker == 'Dawson'), aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+ggplot(nfl.kick %>% filter(Kicker == 'Carpenter'), aes(Distance, makes_above_avg)) + geom_point() + geom_smooth()
+```
+
+Each of these plots show how the player performs across multiple distances.  Interpretation:
+
+-Most of these plots follow a similar trend, in which for distances between 20 and 40 yards, the blue trend line extends around when the "makes_above_avg" is 0. This means that players are converting field kicks that they are predicted to make. In other words, the top 5 players are expected to make their kicks between 20 and 40 yards and are consistently making those shots.
+
+-When the blue trend line rises after the 40 yards,this means players are "over-performing" against the expected probability of scoring. This occurs because for longer shots over 40 yards, the probability of the field goals decrease, so the "make_above_average" will have positive values when the players exceed expectations and make these kicks. Hence, we see this occurrence in all players as they are top 5 players who are skilled in making harder shots. 
+
+-For most players (with the exception of **Carpenter**), the blue trend line tend to decrease after the 50 yard line. This may indicate a flaw in my model in which the model is underestimating the difficulty of shots beyond 50 yards. Or, if my model is assumed to be flawless, this means that players tend to under-perform for longer kicks. This makes sense because longer shots are harder to take
+
+-However, for Carpenter (last plot), his trend line rises after the 50 yard line. This demonstrates that he tends to over-performing against the xFG in longer kicks and is exceeding expectations for long kicks. This demonstrates that unlike the other players, he is often successful in converting difficult long kicks. 
+
+-With these 5 graphs, we can tell which player is **valuable** by looking at their performance per distance. At immediate glance, Carpenter demonstrates impressive skills to exceed expectaions in longer kicks by being projected to make difficult, long kicks. This can be seen in the rising trend line of residuals as distance increases. 
+
+**Teams try to choose players based on performance. Can we see evidence of this in the data?**
+
+We can see evidence of this in this data if we observe the number of kicks of the top 5 players by total accumulated makes_above_average.
+
+```{r}
+Kicker_Stats %>% arrange(desc(total))%>% slice(1:5)
+```
+As seen their, number of kicks all exceed 150 kicks which indicates that these high performing players are being trusted to kick frequently. Furthermore, according to ESPN, all of these players have all recorded at least more than 8 seasons and have more than 80 games played.
