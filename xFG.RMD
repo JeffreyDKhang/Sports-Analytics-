@@ -1,7 +1,7 @@
 
 ---
-Author: "Jefffrey Khang"
-title: "RSM 384 Homework 1 -- Due 9/25/2024"
+Author: "Jeffrey Khang"
+title: "Computing Expected Field Goals (xFG) in the NFL"
 output: pdf_document
 ---
 
